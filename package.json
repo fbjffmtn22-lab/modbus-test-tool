@@ -1,0 +1,24 @@
+{
+  "name": "modbus-test-tool",
+  "version": "1.0.0",
+  "description": "Modbus 测试工具 - 桌面客户端 (Electron)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron ."
+  },
+  "keywords": [
+    "modbus",
+    "test",
+    "tool"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^43.1.1"
+  },
+  "dependencies": {
+    "modbus-serial": "^8.0.25",
+    "serialport": "^13.0.0"
+  }
+}
