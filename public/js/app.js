@@ -66,9 +66,16 @@
             body.host = document.getElementById('connHost').value;
             body.port = document.getElementById('connPort').value;
         }
-        var result = await api.connect(body);
-        if (result.success) { setConnected(true); }
-        else { addLog(result.message, 'err'); }
+        CONFIG.connectBtn.disabled = true;
+        try {
+            var result = await api.connect(body);
+            if (result.success) { setConnected(true); }
+            else { addLog(result.message, 'err'); }
+        } catch (err) {
+            addLog('连接失败: ' + err.message, 'err');
+        } finally {
+            if (CONFIG.statusTextEl.textContent !== '已连接') CONFIG.connectBtn.disabled = false;
+        }
     }
 
     async function doDisconnect() {
@@ -108,7 +115,13 @@
         try {
             var data = await api.getSerialPorts();
             if (data.success && data.ports.length > 0) {
-                sel.innerHTML = data.ports.map(function(p) { return '<option value="' + p.path + '">' + p.path + (p.manufacturer ? ' - ' + p.manufacturer : '') + '</option>'; }).join('');
+                sel.replaceChildren();
+                data.ports.forEach(function(p) {
+                    var option = document.createElement('option');
+                    option.value = p.path;
+                    option.textContent = p.path + (p.manufacturer ? ' - ' + p.manufacturer : '');
+                    sel.appendChild(option);
+                });
                 addLog('扫描到 ' + data.ports.length + ' 个串口', 'info');
             } else {
                 sel.innerHTML = '<option value="">未检测到串口</option>';
@@ -162,10 +175,10 @@
                 var hex = '0x' + val.toString(16).toUpperCase().padStart(4, '0');
                 var bin = val.toString(2).padStart(16, '0');
                 var f = i % 2 === 0 && i + 1 < data.length
-                    ? bytesToFloat(val, data[i + 1])
-                    : (i % 2 === 1 ? '-' : bytesToFloat(val, 0));
+                    ? bytesToFloat(val, data[i + 1]).toFixed(4)
+                    : '-';
                 var ch = val >= 32 && val <= 126 ? String.fromCharCode(val) : '.';
-                html += '<tr><td>' + (addr + i) + '</td><td>' + val + '</td><td>' + hex + '</td><td>' + bin + '</td><td>' + f.toFixed(4) + '</td><td>' + ch + '</td></tr>';
+                html += '<tr><td>' + (addr + i) + '</td><td>' + val + '</td><td>' + hex + '</td><td>' + bin + '</td><td>' + f + '</td><td>' + ch + '</td></tr>';
             }
         }
         tbody.innerHTML = html;

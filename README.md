@@ -14,13 +14,6 @@
 2. 双击安装包，按向导提示完成安装。
 3. 启动桌面程序，无需打开浏览器或终端。
 
-通过 npm 安装：
-
-```
-npm install -g modbus-test-tool
-modbus-test-tool
-```
-
 从源码运行：
 
 ```
@@ -74,17 +67,11 @@ Windows 用户卸载：
 1. 打开设置 - 应用 - 已安装的应用。
 2. 找到 ModbusTestTool，点击卸载。
 
-通过 npm 安装的用户：
-
-```
-npm uninstall -g modbus-test-tool
-```
-
 从源码构建的用户：直接删除项目目录即可，无残留文件。
 
 ## 从源码构建
 
-前置要求：Node.js 20 或更高版本，npm（随 Node.js 一起安装），Git。
+前置要求：Node.js 22.12 或更高版本，npm（随 Node.js 一起安装），Git。
 
 ```bash
 git clone https://github.com/fbjffmtn22-lab/modbus-test-tool.git

@@ -1,21 +1,43 @@
 {
   "name": "modbus-test-tool",
   "version": "1.0.0",
-  "description": "Modbus 测试工具 - 桌面客户端 (Electron)",
+  "description": "支持 Modbus TCP 和 RTU 的桌面测试工具",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron ."
+    "dev": "electron .",
+    "test": "node --test",
+    "pack": "electron-builder --dir",
+    "build:win": "electron-builder --win nsis portable",
+    "build:mac": "electron-builder --mac dmg",
+    "build:linux": "electron-builder --linux AppImage deb"
   },
-  "keywords": [
-    "modbus",
-    "test",
-    "tool"
-  ],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["modbus", "tcp", "rtu", "serial", "test", "tool"],
+  "author": "fbjffmtn22-lab",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fbjffmtn22-lab/modbus-test-tool.git"
+  },
+  "build": {
+    "appId": "com.fbjffmtn22.modbustesttool",
+    "productName": "Modbus Test Tool",
+    "asar": true,
+    "npmRebuild": false,
+    "files": ["main.js", "preload.js", "lib/**/*", "public/**/*", "package.json"],
+    "directories": { "output": "dist" },
+    "win": { "target": ["nsis", "portable"] },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "mac": { "target": "dmg", "category": "public.app-category.utilities" },
+    "linux": { "target": ["AppImage", "deb"], "category": "Utility" }
+  },
   "devDependencies": {
-    "electron": "^43.1.1"
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3"
   },
   "dependencies": {
     "modbus-serial": "^8.0.25",

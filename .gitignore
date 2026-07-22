@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.portable-git/
+git-installer.exe
+git-portable.7z
+server-out.txt
+out.txt
+server.log
+server.err
+*.log
