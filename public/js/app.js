@@ -10,7 +10,52 @@
     };
 
     let polling = false;
+    let connected = false;
+    let currentLanguage = 'zh-CN';
     const api = window.modbusAPI;
+    const I18N = {
+        'zh-CN': {
+            appTitle: '⚡ Modbus 测试工具', language: '界面语言', connectionConfig: '连接配置', mode: '模式', host: '主机', port: '端口',
+            serialPort: '串口', baudRate: '波特率', dataBits: '数据位', stopBits: '停止位', parity: '校验', none: '无', even: '偶校验', odd: '奇校验',
+            scanPorts: '扫描串口', slaveId: '从站 ID', timeout: '超时(s)', connect: '连接', disconnect: '断开', operations: '操作', read: '读取', write: '写入',
+            functionCode: '功能码', startAddress: '起始地址', quantity: '数量', executeRead: '执行读取', address: '地址', value: '值', valuePlaceholder: '0 或 0x1A',
+            executeWrite: '执行写入', data: '数据', autoPoll: '自动轮询', interval: '间隔(ms)', decimalValue: '值（十进制）', hexadecimal: '十六进制', binary: '二进制',
+            noDataYet: '暂无数据，请先连接并读取', noData: '无数据', logs: '日志', connected: '已连接', disconnected: '未连接', writeSuccess: '写入成功',
+            pollStarted: '自动轮询已启动', pollStopped: '自动轮询已停止', noPorts: '未检测到串口', scanFailed: '扫描串口失败', portsFound: '扫描到 {count} 个串口',
+            frameMonitor: '报文监听', clearLogs: '清空', addressHint: '协议地址从 0 开始，例如 40001 通常填写 0'
+        },
+        'en-US': {
+            appTitle: '⚡ Modbus Test Tool', language: 'Language', connectionConfig: 'Connection', mode: 'Mode', host: 'Host', port: 'Port',
+            serialPort: 'Serial Port', baudRate: 'Baud Rate', dataBits: 'Data Bits', stopBits: 'Stop Bits', parity: 'Parity', none: 'None', even: 'Even', odd: 'Odd',
+            scanPorts: 'Scan Ports', slaveId: 'Slave ID', timeout: 'Timeout (s)', connect: 'Connect', disconnect: 'Disconnect', operations: 'Operations', read: 'Read', write: 'Write',
+            functionCode: 'Function', startAddress: 'Start Address', quantity: 'Quantity', executeRead: 'Read', address: 'Address', value: 'Value', valuePlaceholder: '0 or 0x1A',
+            executeWrite: 'Write', data: 'Data', autoPoll: 'Auto Poll', interval: 'Interval (ms)', decimalValue: 'Decimal', hexadecimal: 'Hex', binary: 'Binary',
+            noDataYet: 'No data. Connect and read first.', noData: 'No data', logs: 'Logs', connected: 'Connected', disconnected: 'Disconnected', writeSuccess: 'Write succeeded',
+            pollStarted: 'Auto polling started', pollStopped: 'Auto polling stopped', noPorts: 'No serial ports found', scanFailed: 'Failed to scan serial ports', portsFound: 'Found {count} serial port(s)',
+            frameMonitor: 'Frame Monitor', clearLogs: 'Clear', addressHint: 'Protocol addresses are zero-based; register 40001 usually means address 0'
+        }
+    };
+
+    function t(key) { return I18N[currentLanguage][key] || key; }
+
+    function applyLanguage(language, syncMain) {
+        currentLanguage = language === 'en-US' ? 'en-US' : 'zh-CN';
+        document.documentElement.lang = currentLanguage;
+        document.title = t('appTitle').replace('⚡ ', '');
+        document.getElementById('languageSelect').value = currentLanguage;
+        document.querySelectorAll('[data-i18n]').forEach(function(el) { el.textContent = t(el.dataset.i18n); });
+        document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) { el.placeholder = t(el.dataset.i18nPlaceholder); });
+        setFunctionCodeLabels();
+        setConnected(connected, false);
+        if (syncMain) api.setLanguage(currentLanguage);
+    }
+
+    function setFunctionCodeLabels() {
+        var names = currentLanguage === 'zh-CN'
+            ? { 1: 'FC1 - 读线圈', 2: 'FC2 - 读离散输入', 3: 'FC3 - 读保持寄存器', 4: 'FC4 - 读输入寄存器', 5: 'FC5 - 写单个线圈', 6: 'FC6 - 写单个寄存器', 15: 'FC15 - 写多个线圈', 16: 'FC16 - 写多个寄存器' }
+            : { 1: 'FC1 - Read Coils', 2: 'FC2 - Read Discrete Inputs', 3: 'FC3 - Read Holding Registers', 4: 'FC4 - Read Input Registers', 5: 'FC5 - Write Single Coil', 6: 'FC6 - Write Single Register', 15: 'FC15 - Write Multiple Coils', 16: 'FC16 - Write Multiple Registers' };
+        document.querySelectorAll('#readFc option, #writeFc option').forEach(function(option) { option.textContent = names[option.value]; });
+    }
 
     init();
     function init() {
@@ -23,7 +68,10 @@
         document.getElementById('readBtn').addEventListener('click', doRead);
         document.getElementById('writeBtn').addEventListener('click', doWrite);
         document.getElementById('pollToggle').addEventListener('change', togglePoll);
+        document.getElementById('languageSelect').addEventListener('change', function(e) { applyLanguage(e.target.value, true); });
+        document.getElementById('clearLogBtn').addEventListener('click', function() { CONFIG.logBox.replaceChildren(); });
         setupIPCEvents();
+        api.getLanguage().then(function(language) { applyLanguage(language, false); });
         checkStatus();
     }
 
@@ -42,6 +90,12 @@
 
     function setupIPCEvents() {
         api.onLog(function(msg) { addLog(msg, 'info'); });
+        api.onFrame(function(frame) {
+            if (!document.getElementById('frameMonitorToggle').checked) return;
+            addLog(frame.direction + ' ' + frame.mode + ' [' + frame.length + 'B]  ' + frame.hex, frame.direction.toLowerCase(), frame.timestamp);
+        });
+        api.onLanguageChanged(function(language) { applyLanguage(language, false); });
+        api.onConnectionChanged(function(value) { setConnected(value); });
         api.onPollData(function(data) { renderData(data); });
         api.onPollError(function(data) {
             addLog(data.message, 'err');
@@ -74,7 +128,7 @@
         } catch (err) {
             addLog('连接失败: ' + err.message, 'err');
         } finally {
-            if (CONFIG.statusTextEl.textContent !== '已连接') CONFIG.connectBtn.disabled = false;
+            if (!connected) CONFIG.connectBtn.disabled = false;
         }
     }
 
@@ -106,7 +160,7 @@
             values = parseInt(val);
         }
         var result = await api.write({ fc: fc, addr: addr, values: values });
-        if (result.success) { addLog('写入成功', 'ok'); }
+        if (result.success) { addLog(t('writeSuccess'), 'ok'); }
         else { addLog(result.message, 'err'); }
     }
 
@@ -122,13 +176,13 @@
                     option.textContent = p.path + (p.manufacturer ? ' - ' + p.manufacturer : '');
                     sel.appendChild(option);
                 });
-                addLog('扫描到 ' + data.ports.length + ' 个串口', 'info');
+                addLog(t('portsFound').replace('{count}', data.ports.length), 'info');
             } else {
-                sel.innerHTML = '<option value="">未检测到串口</option>';
-                addLog('未检测到串口', 'err');
+                sel.replaceChildren(new Option(t('noPorts'), ''));
+                addLog(t('noPorts'), 'err');
             }
         } catch(err) {
-            addLog('扫描串口失败', 'err');
+            addLog(t('scanFailed'), 'err');
         }
     }
 
@@ -142,7 +196,7 @@
                 qty: document.getElementById('readQty').value,
                 interval: document.getElementById('pollInterval').value
             });
-            addLog('自动轮询已启动', 'info');
+            addLog(t('pollStarted'), 'info');
         } else {
             stopPoll();
         }
@@ -152,7 +206,7 @@
         polling = false;
         document.getElementById('pollToggle').checked = false;
         api.stopPoll();
-        addLog('自动轮询已停止', 'info');
+        addLog(t('pollStopped'), 'info');
     }
 
     function renderData(result) {
@@ -161,7 +215,7 @@
         var addr = result.address;
         var fc = result.fc;
         if (!data || data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="empty">无数据</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="empty">' + t('noData') + '</td></tr>';
             return;
         }
         var html = '';
@@ -192,17 +246,18 @@
         return view.getFloat32(0, false);
     }
 
-    function setConnected(connected) {
+    function setConnected(value, writeLog) {
+        connected = Boolean(value);
         CONFIG.statusEl.className = 'status-dot ' + (connected ? 'connected' : 'disconnected');
-        CONFIG.statusTextEl.textContent = connected ? '已连接' : '未连接';
+        CONFIG.statusTextEl.textContent = connected ? t('connected') : t('disconnected');
         CONFIG.connectBtn.disabled = connected;
         CONFIG.disconnectBtn.disabled = !connected;
-        if (connected) addLog('连接成功', 'ok');
+        if (connected && writeLog !== false) addLog(t('connected'), 'ok');
     }
 
-    function addLog(msg, type) {
+    function addLog(msg, type, timestamp) {
         var logBox = CONFIG.logBox;
-        var time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+        var time = new Date(timestamp || Date.now()).toLocaleTimeString(currentLanguage, { hour12: false, fractionalSecondDigits: 3 });
         var el = document.createElement('div');
         el.innerHTML = '<span class="log-time">[' + time + ']</span><span class="log-' + (type || 'info') + '">' + escapeHtml(msg) + '</span>';
         logBox.appendChild(el);

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
 const ModbusRTU = require('modbus-serial');
 const { validateConnectParams, validateReadParams, validateWriteParams, validatePollInterval } = require('./lib/validation');
@@ -8,6 +8,56 @@ let client = null;
 let isConnected = false;
 let pollTimer = null;
 let operationQueue = Promise.resolve();
+let currentLanguage = 'zh-CN';
+
+const MENU_TEXT = {
+    'zh-CN': {
+        file: '文件', disconnect: '断开连接', exit: '退出', view: '视图', reload: '重新加载',
+        devtools: '开发者工具', zoomIn: '放大', zoomOut: '缩小', zoomReset: '实际大小',
+        language: '界面语言', chinese: '简体中文', english: 'English', help: '帮助', about: '关于'
+    },
+    'en-US': {
+        file: 'File', disconnect: 'Disconnect', exit: 'Exit', view: 'View', reload: 'Reload',
+        devtools: 'Developer Tools', zoomIn: 'Zoom In', zoomOut: 'Zoom Out', zoomReset: 'Actual Size',
+        language: 'Language', chinese: '简体中文', english: 'English', help: 'Help', about: 'About'
+    }
+};
+
+function setApplicationLanguage(language, notifyRenderer = true) {
+    currentLanguage = language === 'en-US' ? 'en-US' : 'zh-CN';
+    const t = MENU_TEXT[currentLanguage];
+    const chooseLanguage = (value) => setApplicationLanguage(value);
+    Menu.setApplicationMenu(Menu.buildFromTemplate([
+        {
+            label: t.file,
+            submenu: [
+                { label: t.disconnect, click: () => disconnectClient() },
+                { type: 'separator' },
+                { label: t.exit, role: 'quit' }
+            ]
+        },
+        {
+            label: t.view,
+            submenu: [
+                { label: t.reload, role: 'reload' },
+                { label: t.devtools, role: 'toggleDevTools' },
+                { type: 'separator' },
+                { label: t.zoomIn, role: 'zoomIn' },
+                { label: t.zoomOut, role: 'zoomOut' },
+                { label: t.zoomReset, role: 'resetZoom' }
+            ]
+        },
+        {
+            label: t.language,
+            submenu: [
+                { label: t.chinese, type: 'radio', checked: currentLanguage === 'zh-CN', click: () => chooseLanguage('zh-CN') },
+                { label: t.english, type: 'radio', checked: currentLanguage === 'en-US', click: () => chooseLanguage('en-US') }
+            ]
+        },
+        { label: t.help, submenu: [{ label: t.about, role: 'about' }] }
+    ]));
+    if (notifyRenderer) sendToRenderer('language:changed', currentLanguage);
+}
 
 function runExclusive(operation) {
     const next = operationQueue.then(operation, operation);
@@ -36,6 +86,42 @@ function sendToRenderer(channel, data) {
 
 function sendLog(msg) {
     sendToRenderer('log', msg);
+}
+
+function sendFrame(direction, mode, data) {
+    if (!Buffer.isBuffer(data) && !(data instanceof Uint8Array)) return;
+    const buffer = Buffer.from(data);
+    sendToRenderer('frame', {
+        direction,
+        mode: mode.toUpperCase(),
+        hex: Array.from(buffer, byte => byte.toString(16).toUpperCase().padStart(2, '0')).join(' '),
+        length: buffer.length,
+        timestamp: Date.now()
+    });
+}
+
+function attachFrameMonitor(modbusClient, mode) {
+    const transport = modbusClient?._port?._client;
+    if (!transport || transport.__modbusMonitorAttached) return;
+    transport.__modbusMonitorAttached = true;
+    transport.on('data', data => sendFrame('RX', mode, data));
+    const originalWrite = transport.write.bind(transport);
+    transport.write = function(data, ...args) {
+        sendFrame('TX', mode, data);
+        return originalWrite(data, ...args);
+    };
+}
+
+function disconnectClient() {
+    try {
+        stopPolling();
+        if (client) client.close();
+    } catch (e) { /* ignore */ }
+    client = null;
+    isConnected = false;
+    sendLog('已断开连接');
+    sendToRenderer('connection:changed', false);
+    return { success: true };
 }
 
 function createWindow() {
@@ -73,6 +159,7 @@ ipcMain.handle('modbus:connect', async (event, params) => {
         }
         c.setID(config.slaveId);
         c.setTimeout(config.timeout * 1000);
+        attachFrameMonitor(c, config.mode);
         isConnected = true;
         sendLog(`已连接到 ${config.mode === 'rtu' ? config.path : config.host + ':' + config.port} (ID=${config.slaveId})`);
         return { success: true, message: '连接成功' };
@@ -83,14 +170,13 @@ ipcMain.handle('modbus:connect', async (event, params) => {
 });
 
 ipcMain.handle('modbus:disconnect', () => {
-    try {
-        stopPolling();
-        if (client) { client.close(); }
-    } catch (e) { /* ignore */ }
-    client = null;
-    isConnected = false;
-    sendLog('已断开连接');
-    return { success: true };
+    return disconnectClient();
+});
+
+ipcMain.handle('language:get', () => currentLanguage);
+ipcMain.handle('language:set', (_event, language) => {
+    setApplicationLanguage(language, false);
+    return currentLanguage;
 });
 
 ipcMain.handle('modbus:status', () => {
@@ -207,6 +293,7 @@ ipcMain.on('poll:stop', () => {
 // ==================== App Lifecycle ====================
 
 app.whenReady().then(() => {
+    setApplicationLanguage('zh-CN', false);
     createWindow();
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
